@@ -479,6 +479,49 @@ describe('azul-transaction', function() {
 
     });
 
+    it('works with relationships', function(done) {
+      db.model('article').reopen({
+        author: db.belongsTo(),
+        comments: db.hasMany(),
+      });
+      db.model('author', { articles: db.hasMany(), });
+      db.model('comment', { article: db.belongsTo() });
+      adapter.respond(/select \* from "authors"/i, [{ id: 5 }]);
+      adapter.respond(/select \* from "articles"/i,
+        [{ id: 1, 'author_id': 5 }]);
+
+      BPromise.bind().then(function() {
+        var route = at.route(function(req, res, query, Article) {
+          Article.objects.find(1).tap(function(article) {
+            return article.fetchAuthor();
+          })
+          .tap(function(article) {
+            return article.commentObjects.fetch();
+          })
+          .then(function() {
+            res.end();
+          })
+          .catch(done);
+        });
+        return route(req, res, next); // invoke route
+      })
+      .then(function() {
+        expect(adapter.executed).to.eql(['BEGIN']);
+        return res._end.wait;
+      })
+      .then(function() {
+        expect(adapter.clients.length).to.eql(1);
+        expect(adapter.executed).to.eql([
+          'BEGIN',
+          ['SELECT * FROM "articles" WHERE "id" = ? LIMIT 1', [1]],
+          ['SELECT * FROM "authors" WHERE "id" = ? LIMIT 1', [5]],
+          ['SELECT * FROM "comments" WHERE "article_id" = ?', [1]],
+          'COMMIT'
+        ]);
+      })
+      .then(done, done);
+    });
+
   });
 
   describe('test setup', function() {

@@ -9,7 +9,7 @@ using [Azul.js][azul] with Express. For more information, see the
 ```js
 app.post('/articles', at.route(function(req, res, next, Article, Author) {
   Author.objects.findOrCreate({ name: req.body.author }).then(function(author) {
-    return Article.create({ author: author, title: req.body.title }).save();
+    return author.createArticle({ title: req.body.title }).save();
   })
   .then(function(article) {
     res.send({ article: article.json });

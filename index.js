@@ -3,8 +3,6 @@
 var _ = require('lodash');
 var BPromise = require('bluebird');
 
-// TODO: this does not currently work across relationships
-
 var setupRequest = function(db, req) {
   if (req.azul && req.azul.transaction) { return; } // already set up
 
@@ -121,6 +119,54 @@ var makeExpressErrorRoute = function(fn) {
 };
 
 /**
+ * Create a model class binder function.
+ *
+ * The resulting function should be called with the name of a model to bind. A
+ * bound model will be created from that name. All relationships on that model
+ * will also be bound properly. The result is a model that you can safely use
+ * that has been bound to the query/transaction.
+ *
+ * @param {Database} db
+ * @param {Request} req
+ * @return {Function}
+ */
+var modelBinder = function(db, req) {
+  var query = req.azul.query;
+  var bound = {};
+  var bind = function(/*name*/) {
+    var name = arguments[0].toLowerCase();
+    if (!bound[name]) {
+      var subclass = bound[name] = db.model(name).extend();
+      var prototype = subclass.__class__.prototype;
+
+      // create an override of each relation defined on the model with the
+      // relation's model classes swapped out for bound models. note that no
+      // re-configuration will occur for the relation objects. they'll simply
+      // use a different model class when creating or accessing instances.
+      _.keysIn(prototype).filter(function(key) {
+        return key.match(/Relation$/);
+      })
+      .forEach(function(key) {
+        // TODO: we're accessing protected variables on the relation here. it
+        // would be a good idea to expose a tested method in the main azul
+        // project that we're sure will exist.
+        var relation = Object.create(prototype[key]); // copy relation
+        relation._modelClass = bind(relation._modelClass.__name__);
+        relation._relatedModel = bind(relation._relatedModel.__name__);
+        Object.defineProperty(prototype, key, { // redefine property
+          enumerable: true, get: function() { return relation; },
+        });
+      });
+
+      // redefine the query object on this model class
+      subclass.reopenClass({ query: query });
+    }
+    return bound[name];
+  };
+  return bind;
+};
+
+/**
  * A wrapper for Express routes that binds queries & model classes to the
  * transaction.
  *
@@ -173,9 +219,9 @@ var route = function(db, fn) {
 
     // setup the azul argument, binding queries and model classes
     var query = req.azul.query;
+    var binder = modelBinder(db, req);
     var azulArgs = azulParams.map(function(arg) {
-      return arg === 'query' ? query :
-        db.model(arg).extend({}, { query: query });
+      return arg === 'query' ? query : binder(arg);
     });
 
     // combine args & bind function we're wrapping
