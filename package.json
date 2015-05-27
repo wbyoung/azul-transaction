@@ -1,6 +1,6 @@
 {
   "name": "azul-transaction",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Transaction Middleware for Azul.js",
   "main": "index.js",
   "scripts": {
