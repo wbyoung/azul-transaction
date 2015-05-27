@@ -55,7 +55,7 @@ var setupResponse = function(db, req, res, next) {
       else {
         fn.apply(this, arguments);
       }
-    }
+    };
   };
 
   res.writeHead = triggerCommit(res.writeHead);
@@ -107,11 +107,17 @@ var errorMiddleware = function(err, req, res, next) {
 };
 
 var makeExpressStandardRoute = function(fn) {
-  return function(req, res, next) { return fn.apply(this, arguments); };
+  return function(req, res, next) {
+    /* jshint unused: false */
+    return fn.apply(this, arguments);
+  };
 };
 
 var makeExpressErrorRoute = function(fn) {
-  return function(err, req, res, next) { return fn.apply(this, arguments); };
+  return function(err, req, res, next) {
+    /* jshint unused: false */
+    return fn.apply(this, arguments);
+  };
 };
 
 /**
@@ -124,7 +130,7 @@ var makeExpressErrorRoute = function(fn) {
  */
 var route = function(db, fn) {
 
-  var match = fn.toString().match(/function.*\(([^)]*)\)/i);
+  var match = fn.toString().match(/function.*?\((.*?)\)/i);
   var params = _.invoke(match[1].split(','), 'trim');
   var isAzulParam = function(arg) { return arg.match(/^([A-Z]\w*|query)$/); };
   var isExpressParam = _.negate(isAzulParam);
@@ -185,7 +191,7 @@ var route = function(db, fn) {
 module.exports = function(db) {
   var dbMiddleware = middleware(db);
   var dbRoute = _.partial(route, db);
-  return _.extend(middleware(db), {
+  return _.extend(dbMiddleware, {
     route: dbRoute,
     error: errorMiddleware,
   });

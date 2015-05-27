@@ -36,7 +36,7 @@ var Adapter = azul.Adapter.extend({
   _execute: BPromise.method(function(client, sql, args) {
     return BPromise.delay(1).bind(this).then(function() {
       var responder = _.find(this._responders,
-        function(r) { return sql.match(r.regex)});
+        function(r) { return sql.match(r.regex); });
       var result = responder && responder(client, sql, args);
       this.clients = _.uniq(this.clients.concat([client]));
       this.executed.push(args.length ? [sql, args] : sql);
@@ -176,26 +176,42 @@ describe('azul-transaction', function() {
   describe('wrapped route', function() {
 
     it('recognizes a next parameter', function() {
-      expect(at.route(function(req, res, next) {}).length).to.eql(3);
+      var route = at.route(function(req, res, next) { next(); });
+      expect(route.length).to.eql(3);
     });
 
     it('recognizes an error parameter', function() {
-      expect(at.route(function(err, req, res, next) {}).length).to.eql(4);
+      var route = at.route(function(err, req, res, next) {
+        /* jshint unused: false */
+      });
+      expect(route.length).to.eql(4);
+    });
+
+    it('recognizes an error parameter with function body', function() {
+      var route = at.route(function(err, req, res, next) { next(); });
+      expect(route.length).to.eql(4);
     });
 
     it('accepts unknown parameter configurations as standard express params', function() {
-      expect(at.route(function(err, req, res, next, bad) {}).length).to.eql(3);
+      var route = at.route(function(err, req, res, next, bad) {
+        /* jshint unused: false */
+      });
+      expect(route.length).to.eql(3);
     });
 
     it('throws for unkown params following azul params', function() {
       expect(function() {
-        at.route(function(err, req, res, query, Item, bad) {});
+        at.route(function(err, req, res, query, Item, bad) {
+          /* jshint unused: false */
+        });
       }).to.throw(/unexpected arguments:.*query, item, bad/i);
     });
 
     describe('with azul params', function() {
       beforeEach(function() {
-        this.route = at.route(function(req, res, next, query, Article) {});
+        this.route = at.route(function(req, res, next, query, Article) {
+          /* jshint unused: false */
+        });
       });
 
       it('generates a standard express route', function() {
@@ -300,6 +316,7 @@ describe('azul-transaction', function() {
       var error = new Error('Expected');
       BPromise.resolve().then(function() {
         var route = at.route(function(req, res, next, query) {
+          query; // use all params (jshint)
           next(error);
         });
         return route(req, res, next); // invoke route
@@ -321,6 +338,7 @@ describe('azul-transaction', function() {
     it('performs only performs one rollback if rolled back manually & through error', function(done) {
       BPromise.resolve().then(function() {
         var route = at.route(function(req, res, next, query) {
+          query; // use all params (jshint)
           res.azul.rollback();
           next(new Error('Expected'));
         });
@@ -339,6 +357,7 @@ describe('azul-transaction', function() {
     it('commits if next is called without arguments', function(done) {
       BPromise.resolve().then(function() {
         var route = at.route(function(req, res, next, query) {
+          query; // use all params (jshint)
           next();
         });
         return route(req, res, next); // invoke route
@@ -359,6 +378,7 @@ describe('azul-transaction', function() {
     it('throws if next is called with non-error', function(done) {
       BPromise.resolve().then(function() {
         var route = at.route(function(req, res, next, query) {
+          query; // use all params (jshint)
           next('value');
         });
         return route(req, res, next); // invoke route
@@ -382,6 +402,7 @@ describe('azul-transaction', function() {
       it('calls next with error', function(done) {
         BPromise.bind().then(function() {
           var route = at.route(function(req, res, query, Article) {
+            /* jshint unused: false */
           });
           return route(req, res, next); // invoke route
         })
@@ -406,6 +427,7 @@ describe('azul-transaction', function() {
       it('calls next with error', function(done) {
         BPromise.bind().then(function() {
           var route = at.route(function(req, res, query, Article) {
+            Article; // use all params (jshint)
             res.end();
           });
           return route(req, res, next); // invoke route
@@ -435,6 +457,7 @@ describe('azul-transaction', function() {
       it('calls next with error', function(done) {
         BPromise.bind().then(function() {
           var route = at.route(function(req, res, query, Article) {
+            Article; // use all params (jshint)
             res.azul.rollback();
           });
           return route(req, res, next); // invoke route
