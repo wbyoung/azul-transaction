@@ -3,7 +3,22 @@
 [![NPM version][npm-image]][npm-url] [![Build status][travis-image]][travis-url] [![Code Climate][codeclimate-image]][codeclimate-url] [![Coverage Status][coverage-image]][coverage-url] [![Dependencies][david-image]][david-url] [![devDependencies][david-dev-image]][david-dev-url]
 
 Simplify use of [transactions][azul-transactions] on a per-request basis when
-using [Azul.js][azul] with Express.
+using [Azul.js][azul] with Express. For more information, see the
+[Azul.js transaction guide][azul-transactions].
+
+```js
+app.post('/articles', at.route(function(req, res, next, Article, Author) {
+  Author.objects.findOrCreate({ name: req.body.author }).then(function(author) {
+    return Article.create({ author: author, title: req.body.title }).save();
+  })
+  .then(function(article) {
+    res.send({ article: article.json });
+  })
+  .catch(next);
+}));
+```
+
+For reference, the full setup for the above example would look something like this:
 
 ```js
 var express = require('express');
@@ -29,18 +44,8 @@ db.model('Author', {
 
 app.use(bodyParser.urlencoded());
 
-app.post('/articles', at.route(function(req, res, next, Article, Author) {
-  Author.objects.findOrCreate({ name: req.body.author }).then(function(author) {
-    return Article.create({ author: author, title: req.body.title }).save();
-  })
-  .then(function(article) {
-    res.send({ article: article.json });
-  })
-  .catch(next);
-}));
+// insert above code here
 ```
-
-For more information, see the [Azul.js transaction guide][azul-transactions].
 
 ## API
 
