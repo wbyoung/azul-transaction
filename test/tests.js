@@ -13,26 +13,37 @@ var BPromise = require('bluebird');
 var Adapter = azul.Adapter.extend({
   init: function() {
     this._super.apply(this, arguments);
-    this._failures = [];
+    this._responders = [];
     this.clients = [];
     this.executed = [];
   },
   fail: function(sql) {
-    this._failures.push(sql);
+    var responder = function(client, sql/*, args*/) {
+      throw new Error('Intentional failure for ' + sql);
+    };
+    responder.regex = new RegExp(sql, 'i');
+    this._responders.unshift(responder);
   },
-  _connect: BPromise.method(function() { return this.__identity__.sequence++; }),
+  respond: function(regex, result) {
+    var responder = function(/*client, sql, args*/) {
+      return { rows: result, fields: [] };
+    };
+    responder.regex = regex;
+    this._responders.unshift(responder);
+  },
+  _connect: BPromise.method(function() { return { id: ++this.__identity__.cid }; }),
   _disconnect: BPromise.method(function(/*client*/) {}),
   _execute: BPromise.method(function(client, sql, args) {
-    if (_.contains(this._failures, sql)) {
-      throw new Error('Intentional failure for ' + sql);
-    }
     return BPromise.delay(1).bind(this).then(function() {
+      var responder = _.find(this._responders,
+        function(r) { return sql.match(r.regex)});
+      var result = responder && responder(client, sql, args);
       this.clients = _.uniq(this.clients.concat([client]));
       this.executed.push(args.length ? [sql, args] : sql);
-      return { rows: [], fields: [] };
+      return result || { rows: [], fields: [] };
     });
   }),
-}, { sequence: 0 });
+}, { cid: 0 });
 
 var pspy = function() {
   var resolve;
@@ -196,8 +207,6 @@ describe('azul-transaction', function() {
       var context = {};
       var setup = pspy(); at(req, res, setup); // setup middleware
       setup.wait.bind(context).then(function() {
-        var query;
-        var Article;
         var route = at.route(function(req, res, query, Article) {
           context.query = query;
           context.Article = Article;
@@ -232,8 +241,6 @@ describe('azul-transaction', function() {
     it('works without middleware installed', function(done) {
       var context = {};
       BPromise.bind(context).then(function() {
-        var query;
-        var Article;
         var route = at.route(function(req, res, query, Article) {
           context.query = query;
           context.Article = Article;
@@ -268,8 +275,6 @@ describe('azul-transaction', function() {
     it('works for defining error middleware', function(done) {
       var context = {};
       BPromise.bind(context).then(function() {
-        var query;
-        var Article;
         var route = at.route(function(err, req, res, next, query, Article) {
           context.query = query;
           context.Article = Article;
@@ -374,8 +379,8 @@ describe('azul-transaction', function() {
         adapter.fail('BEGIN');
       });
 
-      it('calls next with error when transaction fails', function(done) {
-        BPromise.bind(context).then(function() {
+      it('calls next with error', function(done) {
+        BPromise.bind().then(function() {
           var route = at.route(function(req, res, query, Article) {
           });
           return route(req, res, next); // invoke route
@@ -398,8 +403,8 @@ describe('azul-transaction', function() {
         adapter.fail('COMMIT');
       });
 
-      it('calls next with error when transaction fails', function(done) {
-        BPromise.bind(context).then(function() {
+      it('calls next with error', function(done) {
+        BPromise.bind().then(function() {
           var route = at.route(function(req, res, query, Article) {
             res.end();
           });
@@ -427,8 +432,8 @@ describe('azul-transaction', function() {
         adapter.fail('ROLLBACK');
       });
 
-      it('calls next with error when transaction fails', function(done) {
-        BPromise.bind(context).then(function() {
+      it('calls next with error', function(done) {
+        BPromise.bind().then(function() {
           var route = at.route(function(req, res, query, Article) {
             res.azul.rollback();
           });
@@ -451,6 +456,20 @@ describe('azul-transaction', function() {
 
     });
 
+  });
+
+  describe('test setup', function() {
+    it('uses multiple clients', function(done) {
+      // open transaction & query must use separate clients
+      var txn = db.transaction();
+      txn.begin()
+      .then(function() { return db.query.select('comments'); })
+      .then(function() { return txn.commit(); })
+      .then(function() {
+        expect(adapter.clients.length).to.eql(2);
+      })
+      .then(done, done);
+    });
   });
 
 });
