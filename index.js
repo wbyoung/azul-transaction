@@ -3,6 +3,12 @@
 var _ = require('lodash');
 var BPromise = require('bluebird');
 
+/**
+ * Setup a request object, adding azul functionality.
+ *
+ * @param {Database} db
+ * @param {Request} req
+ */
 var setupRequest = function(db, req) {
   if (req.azul && req.azul.transaction) { return; } // already set up
 
@@ -14,6 +20,14 @@ var setupRequest = function(db, req) {
   });
 };
 
+/**
+ * Setup a response object, adding azul functionality.
+ *
+ * @param {Database} db
+ * @param {Request} req
+ * @param {Response} res
+ * @param {Function} next
+ */
 var setupResponse = function(db, req, res, next) {
   if (res.azul && res.azul.commit) { return; } // already set up
 
@@ -92,6 +106,12 @@ var wrapNext = function(db, req, res, next) {
   };
 };
 
+/**
+ * Make middleware for a specific database.
+ *
+ * @param {Database} db
+ * @return {Function} The middleware.
+ */
 var middleware = function(db) {
   return function(req, res, next) {
     setupRequest(db, req);
@@ -100,10 +120,26 @@ var middleware = function(db) {
   };
 };
 
-var errorMiddleware = function(err, req, res, next) {
-  res.azul.rollback().return(err).then(next).catch(next);
+/**
+ * Make error middleware. This assumes that the main middleware has already
+ * been installed.
+ *
+ * @param {Database} db
+ * @return {Function} The middleware.
+ */
+var errorMiddleware = function(/*db*/) {
+  return function(err, req, res, next) {
+    res.azul.rollback().return(err).then(next).catch(next);
+  };
 };
 
+/**
+ * Make a standard route for express. Basically, just wrap a function in
+ * another that explicitly defines 3 arguments.
+ *
+ * @param {Function} fn
+ * @return {Function}
+ */
 var makeExpressStandardRoute = function(fn) {
   return function(req, res, next) {
     /* jshint unused: false */
@@ -111,6 +147,13 @@ var makeExpressStandardRoute = function(fn) {
   };
 };
 
+/**
+ * Make a standard route for express. Basically, just wrap a function in
+ * another that explicitly defines 4 arguments.
+ *
+ * @param {Function} fn
+ * @return {Function}
+ */
 var makeExpressErrorRoute = function(fn) {
   return function(err, req, res, next) {
     /* jshint unused: false */
@@ -235,10 +278,8 @@ var route = function(db, fn) {
 };
 
 module.exports = function(db) {
-  var dbMiddleware = middleware(db);
-  var dbRoute = _.partial(route, db);
-  return _.extend(dbMiddleware, {
-    route: dbRoute,
-    error: errorMiddleware,
+  return _.extend(middleware(db), {
+    error: errorMiddleware(db),
+    route: _.partial(route, db),
   });
 };
